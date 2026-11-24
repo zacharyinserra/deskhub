@@ -25,7 +25,26 @@ WIDGET_ICONS = {
     "net": "public", "github": "commit",
 }
 _HEX = re.compile(r"#[0-9a-fA-F]{6}")
-SECTIONS = ("pages", "home", "tiles", "display")
+SECTIONS = ("pages", "home", "tiles", "display", "services")
+AGENTS = ("auto", "claude", "codex")
+GITHUB_COLORS = ("green", "accent")
+
+# The plain settings on the services page: key -> (table, key in it, default).
+SERVICES = {
+    "hub_host": ("hub", "host", "deskhub.local"),
+    "calendar_days": ("calendar", "days", 7),
+    "agent": ("ai", "agent", "auto"),
+    "live_limits": ("claude", "live_limits", False),
+    "alerts": ("claude", "alerts", True),
+    "idle_alert_seconds": ("claude", "idle_alert_seconds", 30),
+    "internet": ("internet", "enabled", True),
+    "speedtest_hours": ("internet", "speedtest_hours", 0),
+    "show_ip": ("internet", "show_ip", False),
+    "steam": ("steam", "enabled", True),
+    "presets": ("game_presets", "enabled", True),
+    "presets_disabled": ("game_presets", "disabled", []),
+    "github_colors": ("github", "colors", "green"),
+}
 
 
 def meta() -> dict:
@@ -44,7 +63,42 @@ def meta() -> dict:
         "max_tiles": MAX_TILES,
         "pc_sleep": list(PC_SLEEP_MODES),
         "night_style": list(NIGHT_STYLES),
+        "agents": list(AGENTS),
+        "github_colors": list(GITHUB_COLORS),
+        "presets": [p["name"] for p in _presets()],
+        "printer_types": printer_types(),
     }
+
+
+def _presets():
+    from ..game_presets import PRESETS
+
+    return PRESETS
+
+
+def printer_types() -> list[dict]:
+    """Every printer brand the companion can add, with the questions each one asks."""
+    from .. import printer_types as ptypes
+
+    out = [{"type": "local", "menu": "Bambu Lab on the local network (LAN)",
+            "intro": "Needs the printer's IP address and 8-character access code (Settings > WLAN/Network, or "
+                     "Settings > LAN Only Mode) and the serial number (Settings > Device, or the label). "
+                     "Newer firmware only allows this with LAN Only Mode or Developer Mode on.",
+            "default_port": 0, "ask_port": False, "fields": [{"key": "serial", "prompt": "Serial number",
+                                                              "default": "", "required": True}],
+            "secret_prompt": "Access code", "secret_required": True},
+           {"type": "cloud", "menu": "Bambu Lab through your Bambu account",
+            "intro": "Signing in to Bambu asks for a code it emails you, so this one runs in a terminal window.",
+            "terminal": True}]
+    for kind in ptypes.available():
+        spec = ptypes.module(kind).SPEC
+        out.append({"type": spec.type, "menu": spec.menu, "intro": spec.intro.split("\n", 1)[-1].strip(),
+                    "default_port": spec.default_port, "ask_port": spec.ask_port,
+                    "fields": [{"key": f.key, "prompt": f.prompt, "default": f.default, "required": f.required}
+                               for f in spec.fields],
+                    "secret_prompt": (spec.secret_prompt or "").replace(" (hidden)", "") or None,
+                    "secret_required": spec.secret_required})
+    return out
 
 
 def _night_text(cfg: dict) -> str:
@@ -69,7 +123,53 @@ def read(cfg: dict) -> dict:
         "home": {"header": home_header(cfg), "grid": home_grid(cfg)},
         "tiles": tiles,
         "display": {"pc_sleep": pc_sleep_mode(cfg), "night": _night_text(cfg), "night_style": night_style(cfg)},
+        "services": read_services(cfg),
+        # Shown, and changed through actions (they hold credentials or need a test first).
+        "lists": {"calendars": [describe_feed(f) for f in (cfg.get("calendar") or {}).get("feeds", []) or []],
+                  "printers": [describe_printer(p) for p in cfg.get("printers", []) or []],
+                  "games": [describe_game(g) for g in cfg.get("games", []) or []]},
     }
+
+
+def read_services(cfg: dict) -> dict:
+    out = {}
+    for name, (table, key, default) in SERVICES.items():
+        t = cfg.get(table)
+        value = t.get(key, default) if isinstance(t, dict) else default
+        if isinstance(default, bool):
+            value = bool(value)
+        elif isinstance(default, list):
+            value = [str(v) for v in value] if isinstance(value, list) else []
+        elif isinstance(default, (int, float)) and not isinstance(value, (int, float)):
+            value = default
+        else:
+            value = value if isinstance(default, (int, float)) else str(value)
+        out[name] = value
+    return out
+
+
+def describe_feed(f: dict) -> dict:
+    """A calendar for the page, without its secret address."""
+    kind = "caldav" if str(f.get("type", "")).lower() == "caldav" else "ics"
+    url = str(f.get("url", ""))
+    host = re.sub(r"^\w+://", "", url).split("/")[0] if url.startswith(("http", "webcal")) else url
+    where = (f"iCloud, {f.get('username', '')}: {', '.join(f.get('calendars') or []) or 'all calendars'}"
+             if kind == "caldav" else (host or "no address"))
+    return {"name": str(f.get("name", "")), "color": str(f.get("color", "#7c9cff")), "kind": kind, "where": where}
+
+
+def describe_printer(p: dict) -> dict:
+    from ..printers_cli import describe
+
+    return {"name": str(p.get("name", "")), "type": str(p.get("type", "")), "where": describe(p)}
+
+
+def describe_game(g: dict) -> dict:
+    from ..games_cli import describe
+
+    name = str(g.get("name", ""))
+    text = describe(g)
+    return {"name": name, "where": text[len(name) + 2:] if text.startswith(f"{name}: ") else text}
 
 
 # ---- checks -------------------------------------------------------------------
@@ -138,6 +238,31 @@ def problems(state: dict) -> dict[str, list[str]]:
             errs.append("night mode times look like 23:00-07:00")
         if errs:
             out["display"] = errs
+
+    if "services" in state:
+        s = state["services"]
+        errs = []
+        host = str(s.get("hub_host", "")).strip()
+        if not host or " " in host or "/" in host:
+            errs.append("the board's address is a host name or IP, like deskhub.local or 192.168.1.50")
+        if s.get("agent") not in AGENTS:
+            errs.append(f"AI page: {', '.join(AGENTS)}")
+        if s.get("github_colors") not in GITHUB_COLORS:
+            errs.append("GitHub colours: green or accent")
+        for key, lo, hi, what in (("calendar_days", 1, 60, "calendar days ahead"),
+                                  ("idle_alert_seconds", 0, 3600, "seconds before a finished session alerts"),
+                                  ("speedtest_hours", 0, 168, "hours between speed tests")):
+            v = s.get(key)
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not lo <= v <= hi:
+                errs.append(f"{what}: a number from {lo} to {hi}")
+        from ..game_presets import PRESETS
+
+        names = {p["name"] for p in PRESETS}
+        unknown = [n for n in s.get("presets_disabled", []) if n not in names]
+        if unknown:
+            errs.append(f"no built-in game called {', '.join(unknown)}")
+        if errs:
+            out["services"] = errs
     return out
 
 
@@ -217,7 +342,26 @@ def _write_display(doc, d: dict):
         _set(disp, "night_style", d["night_style"])
 
 
-_WRITERS = {"pages": _write_pages, "home": _write_home, "tiles": _write_tiles, "display": _write_display}
+def _write_services(doc, s: dict):
+    current = read_services(doc.unwrap())
+    for name, (table, key, default) in SERVICES.items():
+        value = s.get(name, default)
+        if isinstance(default, int) and not isinstance(default, bool) and float(value).is_integer():
+            value = int(value)   # 7, not 7.0
+        if name == "hub_host":
+            value = str(value).strip()
+        if value == current[name] and (table in doc and key in doc[table] or value == default):
+            continue   # unchanged, or a default nobody wrote down
+        t = _table(doc, table)
+        if isinstance(value, list):
+            arr = tomlkit.array()
+            arr.extend(value)
+            value = arr
+        t[key] = value
+
+
+_WRITERS = {"pages": _write_pages, "home": _write_home, "tiles": _write_tiles, "display": _write_display,
+            "services": _write_services}
 
 
 def apply(text: str, state: dict) -> tuple[str, list[str]]:

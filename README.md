@@ -222,7 +222,7 @@ Run these in `companion/`.
 | `uv run deskhub-setup <topic>` | Runs one part of setup, such as `calendar`, `weather` or `home`. See [Changing one thing](#changing-one-thing). |
 | `uv run deskhub-flash` | Builds the firmware and sends it to the board over Wi-Fi, or USB. |
 | `uv run deskhub-install` | Starts the companion with Windows; `--remove` stops that. |
-| `uv run deskhub-config` | Opens the settings page in your browser: Home layout, pages, shortcut tiles, screen and night mode. With the companion running, saved changes reach the board at once. |
+| `uv run deskhub-config` | Opens the settings page in your browser: everything setup asks, plus a drag-and-drop Home layout and Build and flash. With the companion running, layout, Home and tile changes reach the board as you save. |
 | `uv run deskhub-calendars` | Lists, adds and removes calendars. |
 | `uv run deskhub-printers` | Adds and removes 3D printers. |
 | `uv run deskhub-games` | Adds a game that isn't on Steam, picked from the programs running now. |

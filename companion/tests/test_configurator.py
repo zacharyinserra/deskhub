@@ -84,6 +84,86 @@ check(same == example and changed == [], f"no-op save changes nothing: {changed}
 text2, _ = model.apply(text, {"display": {"pc_sleep": "clock", "night": "", "night_style": "clock"}})
 check("night =" not in text2.replace("# night", ""), "night removed")
 
+# ---- options (services) ----
+svc = state["services"]
+check(svc["agent"] == "auto" and svc["calendar_days"] == 7 and svc["steam"] is True and svc["presets_disabled"] == [],
+      f"services read: {svc}")
+s2 = dict(svc, agent="codex", speedtest_hours=1.5, calendar_days=14.0, presets_disabled=["Roblox"], hub_host="10.0.0.5")
+check(model.problems({"services": s2}) == {}, f"services ok: {model.problems({'services': s2})}")
+check("services" in model.problems({"services": dict(svc, presets_disabled=["Nope"])}), "unknown preset refused")
+check("services" in model.problems({"services": dict(svc, calendar_days=0)}), "0 days refused")
+check("services" in model.problems({"services": dict(svc, hub_host="a b")}), "bad host refused")
+text3, changed = model.apply(example, {"services": s2})
+again = tomllib.loads(text3)
+check(changed == ["services"] and again["ai"]["agent"] == "codex" and again["internet"]["speedtest_hours"] == 1.5,
+      "services written")
+check(again["calendar"]["days"] == 14 and isinstance(again["calendar"]["days"], int), "whole days stay whole")
+check(again["game_presets"]["disabled"] == ["Roblox"] and again["hub"]["host"] == "10.0.0.5", "presets and host")
+check("github" not in again, "untouched defaults aren't written")
+check(model.read(again)["services"] == s2 | {"calendar_days": 14}, "services round trip")
+check(any(t["type"] == "prusalink" and t["secret_required"] for t in model.meta()["printer_types"]), "printer types")
+
+# ---- actions that edit config.toml (no network) ----
+from deskhub.configurator import actions  # noqa: E402
+
+tmp0 = pathlib.Path(tempfile.mkdtemp())
+try:
+    cfgp = tmp0 / "config.toml"
+    cfgp.write_text(example, encoding="utf-8")
+    actions.game_add(cfgp, {"name": "Factorio", "process": "factorio.exe", "launch": "C:\\Games\\factorio.exe"})
+    games = tomllib.loads(cfgp.read_text(encoding="utf-8"))["games"]
+    check(games == [{"name": "Factorio", "process": "factorio.exe", "launch": "C:/Games/factorio.exe"}], f"game: {games}")
+    check("games" in tomllib.loads(cfgp.read_text(encoding="utf-8"))["pages"]["enabled"], "games page on")
+    try:
+        actions.game_add(cfgp, {"name": "factorio", "process": "x.exe"})
+        check(False, "duplicate game refused")
+    except actions.ActionError:
+        pass
+    actions.game_remove(cfgp, {"index": 0})
+    check(not tomllib.loads(cfgp.read_text(encoding="utf-8")).get("games"), "game removed")
+    actions.calendar_edit(cfgp, {"index": 0, "name": "Home", "color": "#112233"})
+    feed = tomllib.loads(cfgp.read_text(encoding="utf-8"))["calendar"]["feeds"][0]
+    check(feed["name"] == "Home" and feed["color"] == "#112233", f"calendar edited: {feed}")
+    actions.calendar_remove(cfgp, {"index": 0})
+    check(tomllib.loads(cfgp.read_text(encoding="utf-8"))["calendar"]["feeds"] == [], "calendar removed")
+    check("# Must match \"Companion token\"" in cfgp.read_text(encoding="utf-8"), "action keeps comments")
+    try:
+        actions.calendar_remove(cfgp, {"index": 0})
+        check(False, "removing from an empty list refused")
+    except actions.ActionError:
+        pass
+
+    # Firmware settings into a scratch firmware folder.
+    fw = tmp0 / "firmware"
+    fw.mkdir()
+    (fw / "sdkconfig").write_text('CONFIG_HUB_WIFI_SSID="old"\nCONFIG_HUB_TOKEN="change-me"\n', encoding="utf-8")
+    real_fw = actions.FIRMWARE_DIR
+    actions.FIRMWARE_DIR = fw
+    try:
+        out = actions.board_save(cfgp, {"ssid": "Home Net", "password": "secret123", "fahrenheit": True, "h24": False,
+                                        "screen_off_min": 15,
+                                        "place": {"name": "Paris", "latitude": 48.85, "longitude": 2.35,
+                                                  "timezone": "Europe/Paris"}})
+        sdk = (fw / "sdkconfig").read_text(encoding="utf-8")
+        check(out["changed"] and 'CONFIG_HUB_WIFI_SSID="Home Net"' in sdk and "CONFIG_HUB_FAHRENHEIT=y" in sdk, sdk)
+        check('CONFIG_HUB_CITY="Paris"' in sdk and "CET-1CEST" in sdk and "CONFIG_HUB_SCREEN_OFF_MIN=15" in sdk, sdk)
+        tok = tomllib.loads(cfgp.read_text(encoding="utf-8"))["hub"]["token"]
+        check(tok != "change-me" and f'CONFIG_HUB_TOKEN="{tok}"' in sdk, "token made and shared")
+        b = actions.board_read(cfgp, {})
+        check(b["ssid"] == "Home Net" and b["has_password"] and b["city"] == "Paris" and b["fahrenheit"] and not b["h24"],
+              f"board read: {b}")
+        check("password" not in json.dumps(b).replace("has_password", ""), "password never sent back")
+        for bad in ({"ssid": "x" * 33}, {"ssid": "a", "password": "short"}, {"ssid": "a", "screen_off_min": 999}):
+            try:
+                actions.board_save(cfgp, bad)
+                check(False, f"refused: {bad}")
+            except actions.ActionError:
+                pass
+    finally:
+        actions.FIRMWARE_DIR = real_fw
+finally:
+    shutil.rmtree(tmp0, ignore_errors=True)
+
 # ---- HTTP ----
 tmp = pathlib.Path(tempfile.mkdtemp())
 try:
@@ -127,6 +207,14 @@ try:
     check(out["version"] == file_version(path.read_text(encoding="utf-8")), "new version returned")
     check(call("/api/save", {"version": v, "state": {"pages": state["pages"]}})[0] == 409, "stale version refused")
     check(call("/api/save", {"version": out["version"], "state": {}}, token="")[0] == 401, "save needs the token")
+    code, body = call("/api/action", {"name": "game_add", "args": {"name": "Doom", "process": "doom.exe"}})
+    out = json.loads(body)
+    check(code == 200 and out["state"]["lists"]["games"][0]["name"] == "Doom" and out["restart"], f"action: {out}")
+    code, body = call("/api/action", {"name": "game_add", "args": {"name": ""}})
+    check(code == 400 and json.loads(body)["error"].endswith("."), f"action error: {body}")
+    check(call("/api/action", {"name": "nope"})[0] == 404, "unknown action")
+    check(call("/api/action", {"name": "restart"})[0] == 400, "no restart without a companion")
+    check(call("/api/action", {"name": "game_add", "args": {}}, token="")[0] == 401, "actions need the token")
     app.stop()
 finally:
     shutil.rmtree(tmp, ignore_errors=True)

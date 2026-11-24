@@ -157,3 +157,37 @@ label.field > :not(span) { font-size: var(--fs-body); color: var(--text); }
   .sections { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: auto; }
   main { padding: 20px 16px 120px; }
 }
+
+/* ---- forms on the service pages ---- */
+.notice { display: flex; gap: 14px; align-items: center; justify-content: space-between; background: var(--card);
+          border: 1px solid var(--accent); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 20px; }
+.notice p { margin: 0; }
+.form-row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; margin: 8px 0; }
+.form-row .field { flex: 1 1 220px; max-width: 360px; }
+.form-row .field:has(.num), .form-row .field:has(.short) { flex: 0 1 auto; }
+.align-end { align-self: flex-end; margin: 0; }
+.form-row > .hint.align-end { padding-bottom: 8px; }
+.actions-row { display: flex; gap: 10px; margin-top: 12px; }
+input.num { width: 110px; }
+input.short { width: 130px; }
+input[type=number], input[type=password] {
+  background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; }
+.panel { display: grid; gap: 10px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+         padding: 16px; margin-top: 12px; max-width: 760px; }
+.panel input[type=text], .panel input[type=password], .panel input[type=number] { background: var(--bg); }
+.item-list { list-style: none; padding: 0; margin: 0; max-width: 760px; border-top: 1px solid var(--border); }
+.item-list li { display: flex; gap: 12px; align-items: center; padding: 9px 4px; border-bottom: 1px solid var(--border); }
+.item-list li .mi { font-size: 20px; color: var(--muted); }
+.item-list strong { font-weight: 600; }
+.spacer { flex: 1; }
+.swatch { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+.choices { display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow: auto; }
+.choices button { text-align: left; }
+.choices button[aria-pressed=true] { border-color: var(--accent); }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 14px; margin-top: 8px; }
+details { margin-top: 8px; }
+summary { cursor: pointer; color: var(--muted); }
+.hint.pre { white-space: pre-line; }
+.log { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; max-height: 300px;
+       overflow: auto; font: 12px/1.45 Consolas, "Cascadia Mono", monospace; color: var(--muted); white-space: pre-wrap; max-width: 900px; }
+.toggle + .toggle { margin-top: 8px; }

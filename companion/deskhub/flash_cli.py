@@ -42,7 +42,10 @@ def run_idf(firmware: pathlib.Path, command: str) -> bool:
     script += f'. "{idf / "export.ps1"}" | Out-Null; Set-Location "{firmware}"; idf.py {command}; exit $LASTEXITCODE'
     # ESP-IDF refuses to run when it sees an MSYS/Git Bash environment, even from PowerShell.
     env_vars = {k: v for k, v in os.environ.items() if k not in ("MSYSTEM", "MSYSTEM_PREFIX", "MINGW_PREFIX")}
-    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], env=env_vars)
+    # Run from the settings page, the output goes to the page, not a console window.
+    flags = subprocess.CREATE_NO_WINDOW if os.environ.get("DESKHUB_NO_WINDOW") and sys.platform == "win32" else 0
+    r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script], env=env_vars,
+                       creationflags=flags)
     return r.returncode == 0
 
 
@@ -122,9 +125,10 @@ def main():
     ap.add_argument("--port", help="COM port for USB (found automatically when only one board is plugged in)")
     ap.add_argument("--config", default=str(COMPANION_DIR / "config.toml"))
     ap.add_argument("--firmware", default=str(FIRMWARE_DIR))
+    ap.add_argument("--board-token", help=argparse.SUPPRESS)   # the board's token, when config.toml's is new
     args = ap.parse_args()
     ok = install(pathlib.Path(args.firmware), pathlib.Path(args.config), build=not args.no_build,
-                 usb=args.usb, ask_port=(lambda: args.port) if args.port else None)
+                 usb=args.usb, token=args.board_token, ask_port=(lambda: args.port) if args.port else None)
     sys.exit(0 if ok else 1)
 
 

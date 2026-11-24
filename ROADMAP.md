@@ -53,15 +53,9 @@ Ideas for Desk Hub, roughly in order of value. Each item notes how it would work
 
 - [ ] **Pomodoro on the Timer page.** Focus and break cycles (25/5 by default, with a longer break every fourth), a count of focus sessions today, and Windows Focus turned on and off with them.
 
-- [ ] **Configurator UI on the PC.** A settings window instead of editing `config.toml` and answering setup questions in a terminal.
-  - **Sections:** Wi-Fi and city, pages (toggles and order), a drag-and-drop Home layout with a live preview at 800 × 480, calendars, printers, shortcut tiles (icon picker, colour, action), custom games (pick from open windows), Claude/Codex options, internet, and Steam key.
-  - **How:** a small local web app served by the companion on `127.0.0.1` (no new install; opens in the default browser), editing `config.toml` with tomlkit so comments survive. Secrets still go to the Windows credential store.
-  - **Apply live:** saving pushes layout, Home and tile changes to the board at once; settings that need firmware (Wi-Fi, city, units) offer **Build and flash**.
-  - Opened from the tray icon (next to **Edit config**) and by `uv run deskhub-config`.
-  - **Done so far:** the page itself (token-protected, 127.0.0.1 only), Home layout with drag, resize and the 800 × 480 preview, pages and their order, shortcut tiles, screen and night mode; tray **Settings** and `deskhub-config`; live apply. **Still to do:** Wi-Fi, city and units with Build and flash, calendars, printers, custom games, Claude/Codex, internet, Steam key.
-
 ## Done
 
+- [x] Settings page in the browser (tray > Settings, `deskhub-config`): Home layout by drag and drop on an 800 × 480 preview, pages, shortcut tiles, screen and night mode, Wi-Fi, city and units with Build and flash, calendars, printers, games, AI, internet and GitHub; layout changes reach the board on save
 - [x] Sidebar navigation, configurable pages and Home widgets, slim top bar
 - [x] PC stats, media, weather, Google/Apple/ICS calendars, shortcuts
 - [x] Claude Code usage with live limits, the Claude logo on Home and in the sidebar

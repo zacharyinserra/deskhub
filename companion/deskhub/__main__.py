@@ -580,23 +580,28 @@ def main():
     log.info("using %s", path)
     companion = Companion(cfg)
     settings = None
+
+    def restart():
+        # A fresh process re-reads config.toml and rebuilds everything cleanly.
+        log.info("restarting")
+        release_instance()
+        if settings:
+            settings.carry_over()
+        subprocess.Popen([sys.executable, "-m", "deskhub", *sys.argv[1:]], cwd=os.getcwd())
+        os._exit(0)
+
     try:
         from .configurator import Configurator
 
         # The settings page (tray > Settings, or `deskhub-config`), on 127.0.0.1 only.
-        settings = Configurator(path.resolve(), on_apply=companion.reload_threadsafe)
+        # It can restart the companion when it runs hidden or with the tray icon, not in a terminal.
+        settings = Configurator(path.resolve(), on_apply=companion.reload_threadsafe,
+                                on_restart=restart if args.tray or sys.stderr is None else None)
         settings.start()
     except Exception as e:
         log.warning("settings page unavailable: %s", e)
     if args.tray:
         from .tray import Tray
-
-        def restart():
-            # A fresh process re-reads config.toml and rebuilds everything cleanly.
-            log.info("restarting from the tray")
-            release_instance()
-            subprocess.Popen([sys.executable, "-m", "deskhub", *sys.argv[1:]], cwd=os.getcwd())
-            os._exit(0)
 
         def quit_():
             log.info("quit from the tray")

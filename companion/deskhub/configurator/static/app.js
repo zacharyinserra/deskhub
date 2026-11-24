@@ -2,14 +2,17 @@
 // The Desk Hub settings page. Talks to the companion's /api/state and /api/save;
 // every call carries the token from the address the companion opened.
 
-const SECTION_NAMES = { home: "Home layout", pages: "Pages", tiles: "Shortcuts", display: "Screen and night" };
+// Sections of config.toml the Save button writes.
+const SECTION_NAMES = { home: "Home layout", pages: "Pages", tiles: "Shortcuts", display: "Screen and night",
+                        services: "Options" };
 // The page a Home widget needs; widgets for hidden pages stay off the board.
 const WIDGET_PAGE = { claude: "ai", events: "calendar", weather: "weather", media: "media", stats: "stats",
                       printer: "printer", game: "games", net: "network", github: "github" };
 const SWATCHES = ["#3a4256", "#2b2f3a", "#b4413c", "#2f6f5e", "#8a6d1f", "#5b3fa0", "#1f5f8a", "#8a2f6a"];
 
 let token = "";
-let meta = null, orig = null, cur = null, version = "", live = false;
+let meta = null, orig = null, cur = null, version = "", live = false, canRestart = false;
+let needRestart = false;
 let section = "home";
 let problems = {};
 let selWidget = -1, selTile = -1;
@@ -520,7 +523,8 @@ function problemList(s) {
 
 function render() {
   const main = document.getElementById("main");
-  const view = { home: renderHome, pages: renderPages, tiles: renderTiles, display: renderDisplay }[section]();
+  const views = { home: renderHome, pages: renderPages, tiles: renderTiles, display: renderDisplay, ...EXTRA_VIEWS };
+  const view = [restartBar(), ...views[section]()];
   const focusedLabel = document.activeElement?.getAttribute?.("aria-label");
   main.replaceChildren(...view.filter(Boolean));
   if (focusedLabel) main.querySelector(`[aria-label="${CSS.escape(focusedLabel)}"]`)?.focus();
@@ -555,6 +559,8 @@ async function save() {
     for (const s of dirty) orig[s] = clone(cur[s]);
     render();
     changed();
+    if ((data.notes || []).some((n) => n.includes("Restart"))) needRestart = true;
+    render();
     const how = data.applied ? "Saved, and the board has it." : live ? "Saved." :
       "Saved to config.toml. The board gets it when the companion starts.";
     toast([how, ...(data.notes || [])].join(" "));
@@ -576,6 +582,7 @@ async function load() {
   cur = clone(orig);
   version = data.version;
   live = data.live;
+  canRestart = data.can_restart;
   document.getElementById("where").textContent =
     `${data.path} · board at ${orig.hub.host}` + (live ? "" : " · companion not running: changes apply when it starts");
   render();
@@ -584,7 +591,7 @@ async function load() {
 
 function route() {
   const s = location.hash.slice(1);
-  if (SECTION_NAMES[s]) section = s;
+  if (SECTION_NAMES[s] || EXTRA_VIEWS[s]) section = s;
   if (cur) render();
 }
 

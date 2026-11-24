@@ -16,7 +16,7 @@ import threading
 import tomllib
 from typing import Callable
 
-from . import model
+from . import actions, model
 
 log = logging.getLogger(__name__)
 
@@ -37,14 +37,28 @@ def file_version(text: str) -> str:
 
 
 class Configurator:
-    def __init__(self, config_path: pathlib.Path, on_apply: ApplyFn | None = None, port: int = 0):
+    def __init__(self, config_path: pathlib.Path, on_apply: ApplyFn | None = None, port: int = 0,
+                 on_restart: Callable[[], None] | None = None):
         self.config_path = pathlib.Path(config_path)
         self.on_apply = on_apply
-        self.token = secrets.token_urlsafe(24)
+        self.on_restart = on_restart
+        # After a restart from the page, the new companion takes over the same address
+        # (DESKHUB_SETTINGS = "port:token"), so the open page keeps working.
+        carried = os.environ.pop("DESKHUB_SETTINGS", "")
+        old_port, _, old_token = carried.partition(":")
+        self.token = old_token if old_port.isdigit() and old_token else secrets.token_urlsafe(24)
         self._lock = threading.Lock()   # one save at a time
-        self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), self._handler())
+        try:
+            self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", int(old_port) if old_token else port),
+                                                         self._handler())
+        except OSError:
+            self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", port), self._handler())
         self.httpd.daemon_threads = True
         self.port = self.httpd.server_address[1]
+
+    def carry_over(self):
+        """Hand this page's address to the companion that replaces this one."""
+        os.environ["DESKHUB_SETTINGS"] = f"{self.port}:{self.token}"
 
     @property
     def url(self) -> str:
@@ -79,7 +93,32 @@ class Configurator:
         text = self.config_path.read_text(encoding="utf-8")
         cfg = tomllib.loads(text)
         return {"meta": model.meta(), "state": model.read(cfg), "version": file_version(text),
-                "live": self.on_apply is not None, "path": str(self.config_path)}
+                "live": self.on_apply is not None, "can_restart": self.on_restart is not None,
+                "path": str(self.config_path)}
+
+    def action(self, body: dict) -> tuple[int, dict]:
+        name = str(body.get("name", ""))
+        args = body.get("args") or {}
+        if name == "restart":
+            if not self.on_restart:
+                return 400, {"error": "The companion isn't running here; start it to use the new settings."}
+            # Answer first: restarting ends this process.
+            threading.Timer(0.5, self.on_restart).start()
+            return 200, {"message": "Restarting the companion. This page reconnects in a few seconds."}
+        fn = actions.ACTIONS.get(name)
+        if not fn or not isinstance(args, dict):
+            return 404, {"error": "no such action"}
+        try:
+            if name in actions.WRITES:
+                with self._lock:
+                    out = fn(self.config_path, args)
+                text = self.config_path.read_text(encoding="utf-8")
+                out = {**out, "state": model.read(tomllib.loads(text)), "version": file_version(text)}
+            else:
+                out = fn(self.config_path, args)
+        except actions.ActionError as e:
+            return 400, {"error": str(e)[:1].upper() + str(e)[1:] + "."}
+        return 200, out
 
     def save(self, body: dict) -> tuple[int, dict]:
         sections = {k: v for k, v in (body.get("state") or {}).items() if k in model.SECTIONS}
@@ -172,7 +211,7 @@ class Configurator:
                     return self._send(403, b"forbidden", "text/plain")
                 if not self._authorised():
                     return self._json(401, {"error": "This page's link is out of date. Open settings again."})
-                if self.path != "/api/save":
+                if self.path not in ("/api/save", "/api/action"):
                     return self._json(404, {"error": "not found"})
                 n = int(self.headers.get("Content-Length") or 0)
                 if n > MAX_BODY:
@@ -182,9 +221,12 @@ class Configurator:
                 except ValueError:
                     return self._json(400, {"error": "bad request"})
                 try:
-                    code, out = app.save(body)
+                    code, out = app.save(body) if self.path == "/api/save" else app.action(body)
                 except (OSError, tomllib.TOMLDecodeError) as e:
                     code, out = 500, {"error": f"can't save {app.config_path.name}: {e}"}
+                except Exception as e:   # a bug or an odd answer from a printer, calendar...
+                    log.exception("settings page: %s failed", body.get("name") or "save")
+                    code, out = 500, {"error": f"That didn't work ({type(e).__name__}). The companion log has more."}
                 self._json(code, out)
 
         return Handler
