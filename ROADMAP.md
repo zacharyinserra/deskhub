@@ -58,6 +58,7 @@ Ideas for Desk Hub, roughly in order of value. Each item notes how it would work
   - **How:** a small local web app served by the companion on `127.0.0.1` (no new install; opens in the default browser), editing `config.toml` with tomlkit so comments survive. Secrets still go to the Windows credential store.
   - **Apply live:** saving pushes layout, Home and tile changes to the board at once; settings that need firmware (Wi-Fi, city, units) offer **Build and flash**.
   - Opened from the tray icon (next to **Edit config**) and by `uv run deskhub-config`.
+  - **Done so far:** the page itself (token-protected, 127.0.0.1 only), Home layout with drag, resize and the 800 × 480 preview, pages and their order, shortcut tiles, screen and night mode; tray **Settings** and `deskhub-config`; live apply. **Still to do:** Wi-Fi, city and units with Build and flash, calendars, printers, custom games, Claude/Codex, internet, Steam key.
 
 ## Done
 

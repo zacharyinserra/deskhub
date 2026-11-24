@@ -1,8 +1,8 @@
 """The companion's icon in the Windows notification area (system tray).
 
 Coloured while the board is connected, grey while it isn't; the tooltip names
-the board and its IP. Right-click for Edit config, Run setup, Restart, Open log
-and Quit. Plain Win32 through ctypes, on its own thread with its own window.
+the board and its IP. Right-click for Settings, Edit config, Run setup, Restart,
+Open log and Quit; double-click opens Settings. Plain Win32 through ctypes, on its own thread with its own window.
 """
 import ctypes
 import ctypes.wintypes as wt
@@ -60,14 +60,17 @@ def icon_png(color: tuple[int, int, int], size: int = 32) -> bytes:
 class Tray:
     """on_restart and on_quit run on the tray's thread."""
 
-    MENU = [(1, "Edit config"), (2, "Run setup"), (3, "Restart"), (4, "Open log"), (None, None), (5, "Quit")]
+    MENU = [(6, "Settings"), (1, "Edit config"), (2, "Run setup"), (3, "Restart"), (4, "Open log"), (None, None),
+            (5, "Quit")]
 
     def __init__(self, config_path: pathlib.Path, log_file: pathlib.Path | None,
-                 on_restart: Callable[[], None], on_quit: Callable[[], None]):
+                 on_restart: Callable[[], None], on_quit: Callable[[], None],
+                 on_settings: Callable[[], None] | None = None):
         self.config_path = config_path
         self.log_file = log_file
         self.on_restart = on_restart
         self.on_quit = on_quit
+        self.on_settings = on_settings or (lambda: os.startfile(self.config_path))
         self.hwnd = None
         self.connected = False
         self.tip = "Desk Hub: starting"
@@ -149,6 +152,8 @@ class Tray:
             elif cmd == 5:
                 self.remove()
                 self.on_quit()
+            elif cmd == 6:
+                self.on_settings()
         except Exception as e:
             log.warning("tray command failed: %s", e)
 
@@ -158,7 +163,7 @@ class Tray:
             if event in (WM_RBUTTONUP, WM_CONTEXTMENU):
                 self._menu()
             elif event == WM_LBUTTONDBLCLK:
-                self._command(1)
+                self._command(6)
             return 0
         if msg == self._taskbar_created:
             self._notify(NIM_ADD)  # Explorer restarted: put the icon back

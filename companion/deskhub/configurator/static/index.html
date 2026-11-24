@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Desk Hub settings</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <h1>Desk Hub settings</h1>
+  <p class="where" id="where"></p>
+</header>
+
+<div class="shell">
+  <nav class="sections" aria-label="Settings sections">
+    <a href="#home" data-section="home">Home layout</a>
+    <a href="#pages" data-section="pages">Pages</a>
+    <a href="#tiles" data-section="tiles">Shortcuts</a>
+    <a href="#display" data-section="display">Screen and night</a>
+  </nav>
+
+  <main id="main">
+    <p class="loading">Loading config.toml…</p>
+  </main>
+</div>
+
+<footer class="savebar" id="savebar" hidden>
+  <p id="dirty"></p>
+  <button type="button" class="quiet" id="discard">Discard</button>
+  <button type="button" class="primary" id="save">Save</button>
+</footer>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

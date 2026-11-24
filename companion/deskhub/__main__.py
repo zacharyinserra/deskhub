@@ -121,6 +121,7 @@ class Companion:
                 self.servers = MediaServers(servers, cfg.get("media", {}).get("server_users"))
                 log.info("media servers: %s", ", ".join(f"{s.name} ({s.url})" for s in servers))
         self.tiles = load_tiles(cfg)
+        self.tiles_loop_on = False
         # Core Audio calls need COM, so they run on one dedicated thread.
         self.audio_pool = ThreadPoolExecutor(1, thread_name_prefix="audio", initializer=audio_state.com_thread)
         self.lit_msg = None
@@ -379,6 +380,46 @@ class Companion:
             await asyncio.sleep(hours * 3600)
             await self.speedtest()
 
+    # ---- settings page ----------------------------------------------------
+
+    async def reload(self, cfg: dict, changed: list[str]) -> list[str]:
+        """Take new settings from the settings page: pages, Home, tiles and the screen
+        go to the board now. Returns notes on what still needs a restart."""
+        old = self.cfg
+        self.cfg = cfg
+        notes = []
+        if "tiles" in changed:
+            self.tiles = load_tiles(cfg)
+            self.lit_msg = None
+            await self.send(hub_view(self.tiles))
+            if any(t["state"] for t in self.tiles):
+                if self.tiles_loop_on:
+                    await self.refresh_lit()
+                else:
+                    notes.append("Restart the companion for tiles that light up to follow Windows.")
+        if "pages" in changed or "display" in changed:
+            await self.send(layout_message(cfg))
+        if "home" in changed or "pages" in changed:
+            await self.send(home_message(cfg))
+        if "pages" in changed:
+            # Pages whose data comes from loops started at launch.
+            added = set(enabled_pages(cfg)) - set(enabled_pages(old))
+            needs = sorted(added & {"printer", "games", "github"})
+            if needs:
+                from .pages import PAGE_LABELS
+
+                names = " and ".join(PAGE_LABELS[p] for p in needs)
+                notes.append(f"Restart the companion so {names} gets its data.")
+        if "display" in changed and (pc_sleep_mode(cfg) == "none") != (pc_sleep_mode(old) == "none"):
+            notes.append("Restart the companion for the new PC sleep setting.")
+        return notes
+
+    def reload_threadsafe(self, cfg: dict, changed: list[str]) -> list[str]:
+        if self.loop is None:
+            self.cfg = cfg
+            return []
+        return asyncio.run_coroutine_threadsafe(self.reload(cfg, changed), self.loop).result(timeout=10)
+
     # ---- hub commands -----------------------------------------------------
 
     async def handle(self, raw):
@@ -476,6 +517,7 @@ class Companion:
         asyncio.create_task(self.calendar_loop())
         asyncio.create_task(self.claude_loop())
         if any(t["state"] for t in self.tiles):
+            self.tiles_loop_on = True
             asyncio.create_task(self.tiles_loop())
         if self.alerts:
             asyncio.create_task(self.alerts_loop())
@@ -537,6 +579,15 @@ def main():
     cfg = tomllib.loads(path.read_text(encoding="utf-8"))
     log.info("using %s", path)
     companion = Companion(cfg)
+    settings = None
+    try:
+        from .configurator import Configurator
+
+        # The settings page (tray > Settings, or `deskhub-config`), on 127.0.0.1 only.
+        settings = Configurator(path.resolve(), on_apply=companion.reload_threadsafe)
+        settings.start()
+    except Exception as e:
+        log.warning("settings page unavailable: %s", e)
     if args.tray:
         from .tray import Tray
 
@@ -551,7 +602,15 @@ def main():
             log.info("quit from the tray")
             os._exit(0)
 
-        tray = Tray(path.resolve(), log_file, restart, quit_)
+        def open_settings():
+            import webbrowser
+
+            if settings:
+                webbrowser.open(settings.url)
+            else:
+                os.startfile(path.resolve())
+
+        tray = Tray(path.resolve(), log_file, restart, quit_, on_settings=open_settings)
         if tray.start():
             companion.on_status = tray.set_status
     try:

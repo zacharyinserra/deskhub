@@ -207,7 +207,7 @@ This puts a shortcut in your Startup folder that runs the companion hidden (with
 uv run deskhub-install --remove
 ```
 
-The hidden companion shows an icon in the notification area by the clock: amber while the board is connected, grey while it isn't, with the board's name and IP in its tooltip. Right-click it for **Edit config**, **Run setup**, **Restart** (picks up config changes), **Open log** and **Quit**; double-click opens the config. Run `uv run python -m deskhub --tray` to get the icon from a terminal too.
+The hidden companion shows an icon in the notification area by the clock: amber while the board is connected, grey while it isn't, with the board's name and IP in its tooltip. Right-click it for **Settings**, **Edit config**, **Run setup**, **Restart** (picks up config changes), **Open log** and **Quit**; double-click opens Settings. Run `uv run python -m deskhub --tray` to get the icon from a terminal too.
 
 Only one companion runs at a time: if the hidden one is already running, starting another in a terminal stops with a message, because two would keep knocking each other off the board.
 
@@ -222,6 +222,7 @@ Run these in `companion/`.
 | `uv run deskhub-setup <topic>` | Runs one part of setup, such as `calendar`, `weather` or `home`. See [Changing one thing](#changing-one-thing). |
 | `uv run deskhub-flash` | Builds the firmware and sends it to the board over Wi-Fi, or USB. |
 | `uv run deskhub-install` | Starts the companion with Windows; `--remove` stops that. |
+| `uv run deskhub-config` | Opens the settings page in your browser: Home layout, pages, shortcut tiles, screen and night mode. With the companion running, saved changes reach the board at once. |
 | `uv run deskhub-calendars` | Lists, adds and removes calendars. |
 | `uv run deskhub-printers` | Adds and removes 3D printers. |
 | `uv run deskhub-games` | Adds a game that isn't on Steam, picked from the programs running now. |
