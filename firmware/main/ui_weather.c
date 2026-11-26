@@ -4,6 +4,10 @@
 
 #include "icons.h"
 #include "sdkconfig.h"
+
+#ifndef CONFIG_HUB_FAHRENHEIT
+#define CONFIG_HUB_FAHRENHEIT 0
+#endif
 #include "ui_internal.h"
 #include "weather.h"
 
