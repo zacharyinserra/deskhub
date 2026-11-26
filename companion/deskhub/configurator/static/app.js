@@ -137,6 +137,7 @@ const nearest = (list, v) => list.reduce((a, b) => (Math.abs(b - v) < Math.abs(a
 function widgetNote(id) {
   if (id === "clock" && cur.home.header) return "Hidden while the top bar is on";
   const page = WIDGET_PAGE[id];
+  if (page === "network" && !cur.pages.enabled.includes(page)) return "Hidden: Internet is off on the Pages tab";
   if (page && !cur.pages.enabled.includes(page)) return `Hidden: the ${pageLabel(page)} page is off`;
   return "";
 }
@@ -151,6 +152,7 @@ function renderBoard() {
   const rail = h("div", { class: "rail " + (side ? "side" : "bottom"),
                           style: side ? { left: cur.pages.nav === "left" ? "0" : "712px" } : {} });
   for (const p of cur.pages.enabled) {
+    if (p === "network") continue;   // a view inside PC stats, not a tab
     const pm = meta.pages.find((x) => x.id === p);
     rail.append(h("div", { class: "tab" + (p === "home" ? " on" : ""), title: pm.label }, icon(pm.icon)));
   }
@@ -179,6 +181,9 @@ function renderBoard() {
     },
       h("div", { class: "name" }, icon(m.icon), m.label),
       note ? h("div", { class: "off" }, note) : h("div", { class: "size" }, `${it.w} × ${it.h}`),
+      h("button", { type: "button", class: "remove", title: "Remove from Home", "aria-label": `Remove ${m.label} from Home`,
+                    onpointerdown: (e) => e.stopPropagation(),
+                    onclick: () => update(() => { cur.home.grid.splice(i, 1); selWidget = -1; }) }, icon("delete")),
       h("div", { class: "grip", title: "Drag to resize" }, icon("south_east")));
     el.addEventListener("pointerdown", (e) => startDrag(e, board, g, e.target.closest(".grip") ? "resize" : "move", i));
     board.append(el);
@@ -330,12 +335,10 @@ function renderHome() {
           h("select", { onchange: (e) => update(() => { const [w, hh] = e.target.value.split("x").map(Number);
                                                           cur.home.grid[selWidget] = { ...sel, w, h: hh }; }) },
             sizes.map((c) => h("option", { value: `${c.w}x${c.h}`, selected: c.w === sel.w && c.h === sel.h }, `${c.w} × ${c.h}`)))),
-        h("p", { class: "hint" }, "Drag to move it, drag its corner to resize. Arrow keys move it too."),
-        h("div", {}, h("button", { type: "button", onclick: () => update(() => { cur.home.grid.splice(selWidget, 1); selWidget = -1; }) },
-          "Take off Home"))));
+        h("p", { class: "hint" }, "Drag to move it, drag its corner to resize. Arrow keys move it too.")));
   }
   side.append(h("h3", {}, "Not on Home"), palette,
-    h("p", { class: "hint" }, "Drag one onto a free spot. Drag a widget off the board to remove it."));
+    h("p", { class: "hint" }, "Drag one onto a free spot. To remove a widget, use its trash can or drag it off the board."));
 
   return [
     h("h2", {}, "Home layout"),
@@ -350,30 +353,39 @@ function renderHome() {
 
 // ---- Pages --------------------------------------------------------------------
 
+// Internet isn't a tab of its own on the board: "network" in the enabled list turns on
+// the Internet view inside PC stats, so it's a switch under that row, not a page here.
+const NET = "network";
+
 function renderPages() {
-  const enabled = cur.pages.enabled;
-  const order = enabled.concat(meta.pages.map((p) => p.id).filter((p) => !enabled.includes(p)));
+  const netOn = cur.pages.enabled.includes(NET);
+  const tabs = cur.pages.enabled.filter((p) => p !== NET);
+  // Keep "network" right after "stats", where setup writes it, so the list only changes when the tabs do.
+  const withNet = (list) => { const i = list.indexOf("stats"); return i < 0 ? list.concat([NET]) : list.toSpliced(i + 1, 0, NET); };
+  const setTabs = (list) => { cur.pages.enabled = netOn ? withNet(list) : list; };
+  const order = tabs.concat(meta.pages.map((p) => p.id).filter((p) => p !== NET && !tabs.includes(p)));
   const list = h("ul", { class: "page-list" });
   let dragFrom = null;
   order.forEach((id) => {
     const pm = meta.pages.find((p) => p.id === id);
-    const on = enabled.includes(id);
-    const idx = enabled.indexOf(id);
+    const on = tabs.includes(id);
+    const idx = tabs.indexOf(id);
     const move = (d) => update(() => {
-      const e = cur.pages.enabled, j = idx + d;
-      [e[idx], e[j]] = [e[j], e[idx]];
+      const t = tabs.slice(), j = idx + d;
+      [t[idx], t[j]] = [t[j], t[idx]];
+      setTabs(t);
     });
     const li = h("li", { class: on ? "" : "hidden-page", draggable: on && id !== "home" ? "true" : false },
       h("input", { type: "checkbox", checked: on, disabled: id === "home", "aria-label": `Show ${pm.label}`,
                    onchange: (e) => update(() => {
-                     cur.pages.enabled = e.target.checked ? enabled.concat([id]) : enabled.filter((p) => p !== id);
+                     setTabs(e.target.checked ? tabs.concat([id]) : tabs.filter((p) => p !== id));
                    }) }),
       icon(pm.icon), pm.label,
       on && id !== "home" ? h("span", { class: "move" },
         h("button", { type: "button", class: "icon", title: "Move up", "aria-label": `Move ${pm.label} up`,
                       disabled: idx <= 1, onclick: () => move(-1) }, icon("arrow_upward")),
         h("button", { type: "button", class: "icon", title: "Move down", "aria-label": `Move ${pm.label} down`,
-                      disabled: idx >= enabled.length - 1, onclick: () => move(1) }, icon("arrow_downward"))) : null);
+                      disabled: idx >= tabs.length - 1, onclick: () => move(1) }, icon("arrow_downward"))) : null);
     if (on && id !== "home") {
       li.addEventListener("dragstart", (e) => { dragFrom = id; e.dataTransfer.effectAllowed = "move"; });
       li.addEventListener("dragover", (e) => { if (dragFrom) { e.preventDefault(); li.classList.add("drag-over"); } });
@@ -382,15 +394,24 @@ function renderPages() {
         e.preventDefault();
         if (!dragFrom || dragFrom === id) return;
         update(() => {
-          const e2 = cur.pages.enabled.filter((p) => p !== dragFrom);
-          e2.splice(e2.indexOf(id), 0, dragFrom);
-          cur.pages.enabled = e2;
+          const t = tabs.filter((p) => p !== dragFrom);
+          t.splice(t.indexOf(id), 0, dragFrom);
+          setTabs(t);
         });
       });
     }
     list.append(li);
+    if (id === "stats") {
+      list.append(h("li", { class: "sub" + (on ? "" : " hidden-page") },
+        h("input", { type: "checkbox", checked: netOn, disabled: !on, "aria-label": "Show Internet on the PC stats page",
+                     onchange: (e) => update(() => {
+                       cur.pages.enabled = e.target.checked ? withNet(tabs) : tabs;
+                     }) }),
+        icon("public"), "Internet",
+        h("span", { class: "hint" }, "a view on PC stats: latency, outages, speed tests")));
+    }
   });
-  const navLabels = { left: "Left", right: "Right", bottom: "Along the bottom" };
+  const navLabels = { left: "Left", right: "Right", bottom: "Bottom" };
   return [
     h("h2", {}, "Pages"),
     h("p", { class: "lead" }, "Which pages the board shows, in navigation bar order. Home is always first. Drag a page or use the arrows to reorder."),
@@ -407,10 +428,65 @@ function renderPages() {
 
 // ---- Shortcuts ----------------------------------------------------------------
 
+// Drop tile `from` onto tile `to`: it takes that place and the rest shift along.
+function moveTile(from, to) {
+  if (from < 0 || from === to) return;
+  update(() => {
+    const [t] = cur.tiles.splice(from, 1);
+    cur.tiles.splice(to, 0, t);
+    if (selTile === from) selTile = to;
+    else if (selTile > from && selTile <= to) selTile--;
+    else if (selTile < from && selTile >= to) selTile++;
+  });
+}
+
 function tileView(t, i) {
-  return h("button", { type: "button", class: "tile" + (i === selTile ? " selected" : ""), style: { background: t.color },
-                       onclick: () => update(() => { selTile = i; }), "aria-label": `Edit ${t.label || "tile " + (i + 1)}` },
+  const el = h("button", { type: "button", class: "tile" + (i === selTile ? " selected" : ""), style: { background: t.color },
+                           title: "Drag to reorder", "data-index": i,
+                           onclick: (e) => { if (e.detail === 0) update(() => { selTile = i; }); },   // Enter or Space
+ "aria-label": `Edit ${t.label || "tile " + (i + 1)}` },
     icon(t.icon), h("span", {}, t.label || " "));
+  el.addEventListener("keydown", (e) => {   // keyboard reorder: Alt + arrow
+    const d = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+    if (!e.altKey || !d || !cur.tiles[i + d]) return;
+    e.preventDefault();
+    moveTile(i, i + d);
+  });
+  el.addEventListener("pointerdown", (e) => dragTile(e, el, i));
+  return el;
+}
+
+// A press that moves more than a few pixels drags the tile; otherwise it's a click that selects it.
+function dragTile(e, el, from) {
+  if (e.button !== 0) return;
+  const x0 = e.clientX, y0 = e.clientY;
+  let moved = false, target = null;
+  el.setPointerCapture(e.pointerId);
+  const mark = (t) => {
+    if (target) target.classList.remove("drop-before", "drop-after");
+    target = t;
+    if (t) t.classList.add(Number(t.dataset.index) < from ? "drop-before" : "drop-after");
+  };
+  const onMove = (ev) => {
+    if (!moved && Math.abs(ev.clientX - x0) + Math.abs(ev.clientY - y0) < 6) return;
+    moved = true;
+    el.classList.add("dragging");
+    const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest(".tile[data-index]");
+    mark(over && over !== el ? over : null);
+  };
+  const onUp = (ev) => {
+    el.removeEventListener("pointermove", onMove);
+    el.removeEventListener("pointerup", onUp);
+    el.removeEventListener("pointercancel", onUp);
+    el.classList.remove("dragging");
+    const to = target ? Number(target.dataset.index) : -1;
+    mark(null);
+    if (!moved) { if (ev.type === "pointerup") update(() => { selTile = from; }); return; }
+    if (to >= 0) moveTile(from, to);
+  };
+  el.addEventListener("pointermove", onMove);
+  el.addEventListener("pointerup", onUp);
+  el.addEventListener("pointercancel", onUp);
 }
 
 function renderTileForm() {
@@ -437,12 +513,6 @@ function renderTileForm() {
     target = h("label", { class: "field" }, h("span", {}, act.target),
       h("input", { type: "text", value: t.target, spellcheck: "false", onchange: (e) => set("target", e.target.value) }));
   }
-  const n = cur.tiles.length;
-  const move = (d) => update(() => {
-    const j = selTile + d;
-    [cur.tiles[selTile], cur.tiles[j]] = [cur.tiles[j], cur.tiles[selTile]];
-    selTile = j;
-  });
   return h("div", { class: "tile-form" },
     h("label", { class: "field" }, h("span", {}, "Label"),
       h("input", { type: "text", value: t.label, maxlength: "30", onchange: (e) => set("label", e.target.value) })),
@@ -462,8 +532,6 @@ function renderTileForm() {
         h("input", { type: "color", value: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : "#3a4256", "aria-label": "Other colour",
                      onchange: (e) => set("color", e.target.value) }))),
     h("div", { class: "row" },
-      h("button", { type: "button", disabled: selTile === 0, onclick: () => move(-1) }, "Move earlier"),
-      h("button", { type: "button", disabled: selTile === n - 1, onclick: () => move(1) }, "Move later"),
       h("button", { type: "button", onclick: () => update(() => { cur.tiles.splice(selTile, 1); selTile = Math.min(selTile, cur.tiles.length - 1); }) },
         "Delete tile")));
 }
@@ -478,7 +546,7 @@ function renderTiles() {
   }
   return [
     h("h2", {}, "Shortcuts"),
-    h("p", { class: "lead" }, `Buttons on the Shortcuts page that do something on this PC. Up to ${meta.max_tiles}; 2, 4, 6, 8, 12 or 16 make an even grid.`),
+    h("p", { class: "lead" }, `Buttons on the Shortcuts page that do something on this PC. Up to ${meta.max_tiles}; 2, 4, 6, 8, 12 or 16 make an even grid. Drag a tile to change the order.`),
     h("div", { class: "tiles-layout" }, grid, renderTileForm()),
     problemList("tiles"),
   ];
@@ -490,8 +558,8 @@ function renderDisplay() {
   const d = cur.display;
   const [start, end] = d.night ? d.night.split("-") : ["", ""];
   const setNight = (s, e) => update(() => { d.night = s && e ? `${s}-${e}` : ""; });
-  const sleepText = { off: "Turn the screen off", clock: "Show a dim clock", none: "Stay as it is" };
-  const nightText = { off: "Screen off", clock: "A dim clock" };
+  const sleepText = { off: "Turn the screen off", clock: "Clock", none: "Stay as it is" };
+  const nightText = { off: "Screen off", clock: "Clock" };
   return [
     h("h2", {}, "Screen and night"),
     h("h3", {}, "While the PC's display is asleep"),

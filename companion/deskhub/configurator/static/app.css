@@ -85,7 +85,7 @@ label.field > :not(span) { font-size: var(--fs-body); color: var(--text); }
 .board .widget { position: absolute; background: var(--card); border: 1px solid var(--border); border-radius: 12px;
                  padding: 12px 14px; display: flex; flex-direction: column; justify-content: space-between;
                  cursor: grab; touch-action: none; }
-.board .widget .name { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 16px; }
+.board .widget .name { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 16px; padding-right: 26px; }
 .board .widget .name .mi { font-size: 24px; color: var(--text); }
 .board .widget .size { color: var(--dim); font-size: 16px; }
 .board .widget .off { color: var(--bad); font-size: 14px; }
@@ -93,6 +93,9 @@ label.field > :not(span) { font-size: var(--fs-body); color: var(--text); }
 .board .widget.dragging { opacity: .35; }
 .board .widget .grip { position: absolute; right: 2px; bottom: 2px; width: 26px; height: 26px; cursor: nwse-resize;
                        color: var(--dim); font-size: 22px; display: grid; place-items: center; }
+.board .widget .remove { position: absolute; top: 6px; right: 6px; padding: 4px; line-height: 0; font-size: 20px;
+                         background: transparent; border-color: transparent; color: var(--dim); cursor: pointer; }
+.board .widget .remove:hover { color: var(--bad); background: var(--card-hi); }
 .board .ghost { position: absolute; border-radius: 12px; border: 2px solid var(--accent); background: rgba(255,178,36,.12);
                 pointer-events: none; }
 .board .ghost.bad { border-color: var(--bad); background: rgba(255,107,107,.12); }
@@ -117,6 +120,8 @@ label.field > :not(span) { font-size: var(--fs-body); color: var(--text); }
 .page-list li.hidden-page { color: var(--dim); }
 .page-list li .move { margin-left: auto; display: flex; gap: 4px; }
 .page-list li.drag-over { box-shadow: inset 0 2px 0 var(--accent); }
+.page-list li.sub { padding-left: 32px; }
+.page-list li.sub .hint { margin-left: 4px; }
 .radios { display: flex; gap: 18px; flex-wrap: wrap; }
 .radios label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 .radios input { accent-color: var(--accent); }
@@ -129,6 +134,10 @@ label.field > :not(span) { font-size: var(--fs-body); color: var(--text); }
 .tile .mi { font-size: 32px; }
 .tile span:last-child { font-size: var(--fs-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .tile.selected { border-color: var(--accent); }
+.tile[data-index] { cursor: grab; touch-action: none; }
+.tile.dragging { opacity: .35; }
+.tile.drop-before { box-shadow: -6px 0 0 -1px var(--accent); }
+.tile.drop-after { box-shadow: 6px 0 0 -1px var(--accent); }
 .tile.add { background: transparent; border: 1px dashed var(--border); color: var(--muted); }
 .tile-form { display: grid; gap: 14px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
 .tile-form .row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -191,3 +200,21 @@ summary { cursor: pointer; color: var(--muted); }
 .log { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; max-height: 300px;
        overflow: auto; font: 12px/1.45 Consolas, "Cascadia Mono", monospace; color: var(--muted); white-space: pre-wrap; max-width: 900px; }
 .toggle + .toggle { margin-top: 8px; }
+
+/* ---- Wi-Fi, city and units ---- */
+.panel.fw { gap: 0; margin: 0 0 20px; padding: 4px 20px 18px; }
+.panel.fw h3 { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 8px; }
+.panel.fw h3 .hint { font-weight: 500; }
+.panel.fw > .hint { margin: 4px 0 8px; }
+.panel.fw .form-row { margin: 0 0 6px; }
+.form-row.end { align-items: flex-end; }
+.toggle.tall { min-height: 38px; }
+label.inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+label.inline .hint { margin-left: 4px; }
+.panel.fw details { margin: 10px 0 0; }
+.panel.fw details .form-row { margin-top: 10px; }
+.panel.fw .log { margin: 14px 0 0; max-width: none; }
+.panel-foot { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 18px;
+              padding-top: 14px; border-top: 1px solid var(--border); }
+.panel-foot p { margin: 0 auto 0 0; font-size: var(--fs-small); }
+.ok { color: #6fcf97; }

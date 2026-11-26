@@ -121,7 +121,7 @@ HOME_WIDGETS = {
     "media": "Now playing",
     "stats": "PC stats",
     "printer": "3D print progress",
-    "game": "Steam game",
+    "game": "Game",
     "net": "Internet",
     "github": "GitHub contributions",
 }
